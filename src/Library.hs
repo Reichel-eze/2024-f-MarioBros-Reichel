@@ -7,7 +7,7 @@ doble numero = numero + numero
 data Plomero = UnPlomero {
     nombre :: String,
     dinero :: Number,
-    reparaciones :: [String],
+    reparaciones :: [Reparacion],
     herramientas :: [Herramienta]
 }   deriving (Show, Eq)
 
@@ -105,7 +105,7 @@ perderDinero herramienta plomero = plomero {dinero = dinero plomero - precio her
 data Reparacion = UnaReparacion {
     descripcion :: String,
     requerimiento :: (Plomero -> Bool)
-}
+}deriving (Show,Eq)
 
 filtracionDeAgua :: Reparacion
 filtracionDeAgua = UnaReparacion "filtracion de agua" requerimientoFiltracionDeAgua
@@ -142,4 +142,82 @@ esMayuscula letra = letra `elem` ['A'..'Z']
 presupuestoReparacion :: Reparacion -> Number
 presupuestoReparacion reparacion = (length (descripcion reparacion)) * 3
 
+-- 6) Hacer que un plomero haga una reparación. 
+-- * Si no puede resolverla te cobra $100 la visita. 
+-- * Si puede hacerla, cobra el dinero por el presupuesto de la misma y agrega esa reparación a su historial de reparaciones, además de:
+
+--Si el plomero es malvado, le roba al cliente un destornillador con mango de plástico, claramente su precio es nulo.
+--Si no es malvado y la reparación es difícil, pierde todas sus herramientas buenas.
+--Si no es malvado ni es difícil la reparación, sólo se olvida la primera de sus herramientas.
+--Un plomero puede hacer una reparación si cumple su requerimiento o es un plomero malvado con un martillo.
+
+intentarHacerReparacion :: Reparacion -> Plomero -> Plomero
+intentarHacerReparacion reparacion plomero 
+    | puedeHacerReparacion reparacion plomero = (cambiarHerramientasSegun reparacion. agregarReparacion reparacion. cobrarPresupuesto reparacion) plomero   
+    | otherwise = cobrarDinero 100 plomero
+
+cambiarHerramientasSegun :: Reparacion -> Plomero -> Plomero
+cambiarHerramientasSegun reparacion plomero 
+    | esMalvado plomero = leRoba plomero
+    | esDificil reparacion = perderHerramientasBuenas plomero 
+    | otherwise = plomero {herramientas = tail (herramientas plomero)}
+
+leRoba :: Plomero -> Plomero
+leRoba plomero = agregarHerramienta (UnaHerramienta "destornillador" Plastico 0) plomero
+
+perderHerramientasBuenas :: Plomero -> Plomero
+perderHerramientasBuenas plomero = plomero {herramientas = filter (not . esBuena) (herramientas plomero)}
+
+cobrarPresupuesto :: Reparacion -> Plomero -> Plomero
+cobrarPresupuesto reparacion plomero = cobrarDinero (presupuestoReparacion reparacion) plomero
+
+agregarReparacion :: Reparacion -> Plomero -> Plomero
+agregarReparacion newReparacion plomero = plomero {reparaciones = newReparacion : reparaciones plomero}
+
+puedeHacerReparacion :: Reparacion -> Plomero -> Bool
+puedeHacerReparacion reparacion plomero = (requerimiento reparacion plomero) || (esMalvado plomero && tieneHerramienta' "martillo" plomero)
+
+cobrarDinero :: Number -> Plomero -> Plomero
+cobrarDinero delta plomero = plomero {dinero = dinero plomero + delta}
+
+-- 7) Nintendo, pese a ser una empresa de consolas y juegos, gana millones de dólares con su red de plomeros. 
+-- Cada plomero realiza varias reparaciones en un día. Necesitamos saber cómo afecta a un plomero una jornada de trabajo. 
+-- Bajan línea desde Nintendo que no usemos recursividad.
+
+type Plomeros = [Plomero]
+
+jornadaDeTrabajo :: [Reparacion] -> Plomero -> Plomero
+jornadaDeTrabajo reparaciones plomero = foldr intentarHacerReparacion plomero reparaciones
+
+-- 8) Nintendo beneficia a sus plomeros según ciertos criterios, es por eso que necesita saber, dado un conjunto de reparaciones a realizar 
+-- en una jornada laboral, cuál de todos sus empleados es:
+-- * El empleado más reparador: El plomero que más reparaciones tiene en su historial una vez realizada su jornada laboral.
+-- * El empleado más adinerado: El plomero que más dinero tiene encima una vez realizada su jornada laboral.
+-- * El empleado que más invirtió: El plomero que más plata invertida tiene entre las herramientas que le quedaron una vez realizada su jornada laboral.
+
+type Criterio = [Reparacion] -> Plomero -> Number
+
+--empleadoMasReparador :: [Reparacion] -> [Plomero] -> Plomero
+--empleadoMasReparador reparaciones (plomero1:plomero2:plomeros) 
+--    | cantididadReparacionesTotales reparaciones plomero1 > cantididadReparacionesTotales reparaciones plomero2 = empleadoMasReparador reparaciones (plomero1:plomeros)
+--    | otherwise = empleadoMasReparador reparaciones (plomero2:plomeros)
+
+elEmpleadoMasSegun :: Criterio -> [Reparacion] -> [Plomero] -> Plomero
+elEmpleadoMasSegun criterio repas (plomero1:plomero2:plomeros)
+    | criterio repas plomero1 > criterio repas plomero2 = elEmpleadoMasSegun criterio repas (plomero1:plomeros)
+    | otherwise = elEmpleadoMasSegun criterio repas (plomero2:plomeros)
+
+-- CRITERIOS -- 
+
+cantididadReparacionesTotales :: Criterio
+cantididadReparacionesTotales unasReparaciones plomero = length (reparaciones (jornadaDeTrabajo unasReparaciones plomero))
+
+cantididadDineroTotal :: Criterio
+cantididadDineroTotal unasReparaciones plomero = dinero (jornadaDeTrabajo unasReparaciones plomero)
+
+cantidadPlataInvertida :: Criterio
+cantidadPlataInvertida unasReparaciones plomero = totalPlataHerramientas (jornadaDeTrabajo unasReparaciones plomero)
+
+totalPlataHerramientas :: Plomero -> Number
+totalPlataHerramientas plomero = sum (map precio (herramientas plomero)) 
 
